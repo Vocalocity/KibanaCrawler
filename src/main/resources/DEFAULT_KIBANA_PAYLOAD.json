@@ -1,0 +1,63 @@
+{
+  "params": {
+    "index" : "add",
+    "body": {
+      "sort": [
+        {
+          "timestamp": {
+            "order": "desc",
+            "unmapped_type": "boolean"
+          }
+        }
+      ],
+      "size": 10000,
+      "version": true,
+      "docvalue_fields": [
+        {
+          "field": "ef-json-message.request_time",
+          "format": "date_time"
+        },
+        {
+          "field": "processed_timestamp",
+          "format": "date_time"
+        },
+        {
+          "field": "timestamp",
+          "format": "date_time"
+        }
+      ],
+      "query": {
+        "bool": {
+          "must": [],
+          "filter": [
+            {
+              "multi_match": {
+                "type": "phrase",
+                "query" : "wedwed",
+                "lenient": true
+              }
+            },
+            {
+              "range": {
+                "timestamp": {
+                  "gte": "2024-06-13T00:00:00.000Z",
+                  "lte": "2024-06-29T00:00:00.000Z",
+                  "format": "strict_date_optional_time"
+                }
+              }
+            }
+          ],
+          "should": [],
+          "must_not": [
+            {
+              "match_phrase": {
+                "account": "QA"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "preference": 1718883921612
+  }
+}
