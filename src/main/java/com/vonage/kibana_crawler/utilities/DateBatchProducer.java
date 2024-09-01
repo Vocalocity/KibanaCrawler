@@ -54,7 +54,7 @@ public final class DateBatchProducer implements Iterator<Pair<LocalDateTime, Loc
 
     @Override
     public boolean hasNext() {
-        return !start.isEqual(end);
+        return start.isBefore(end);
     }
 
     @Override
