@@ -29,6 +29,13 @@ public final class DateBatchProducer implements Iterator<Pair<LocalDateTime, Loc
         this.multiplier = multiplier;
     }
 
+    public DateBatchProducer(final DateBatchProducer dateBatchProducer){
+        this.start = dateBatchProducer.start;
+        this.end = dateBatchProducer.end;
+        this.timeUnit = dateBatchProducer.timeUnit;
+        this.multiplier = dateBatchProducer.multiplier;
+    }
+
     private LocalDateTime updateStart(){
         start = incrementDate(start, timeUnit, multiplier);
         return start;
