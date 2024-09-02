@@ -1,5 +1,6 @@
 package com.vonage.kibana_crawler.service.kibana_service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.vonage.kibana_crawler.aspects.annotation.ExecutionTime;
 import com.vonage.kibana_crawler.configs.CrawlerEnvironment;
 import com.vonage.kibana_crawler.mappers.AppCustomizedKibanaRequestToKibanaRequestMapper;
@@ -12,17 +13,19 @@ import com.vonage.kibana_crawler.pojo.kibana_response.KibanaResponse;
 import com.vonage.kibana_crawler.utilities.constants.Symbols;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
+import okhttp3.internal.http2.Header;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,35 +35,53 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class KibanaAPIService implements IKibanaAPIService {
 
-    private final RestTemplate restTemplate;
+    private final OkHttpClient okHttpClient;
 
     private final AppCustomizedKibanaRequestToKibanaRequestMapper kibanaRequestMapper;
 
     private final CrawlerEnvironment environment;
 
+    private final static int TIMEOUT = 150000; // timeout is 2.5 minutes.
+
     @Setter
     @Getter
-    private HttpHeaders headers;
+    private Headers headers;
 
     @SneakyThrows
     @ExecutionTime
     private KibanaResponse sendRequest(KibanaRequest request) {
         log.info("Searching for '{}' Duration {}...", KibanaRequestHelper.getQuery(request), KibanaRequestHelper.getRange(request, "timestamp"));
         try{
-            ResponseEntity<String> response = restTemplate.exchange(
-                    CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH,
-                    HttpMethod.POST,
-                    new HttpEntity<>(CrawlerConstants.MAPPER.writeValueAsString(request), headers),
-                    String.class
-            );
-            if(response.getStatusCode().is2xxSuccessful()) {
-                return CrawlerConstants.MAPPER.readValue(response.getBody(), KibanaResponse.class);
+            Response response = getFutureResponse(request);
+            if(response.isSuccessful()) {
+                return CrawlerConstants.MAPPER.readValue(response.body().string(), KibanaResponse.class);
             }
-            else log.error("{} Response {}", CrawlerConstants.SOMETHING_WENT_WRONG, response.getBody());
-        }catch (Exception e){
+            else log.error("{} Response {}", CrawlerConstants.SOMETHING_WENT_WRONG, response.body().string());
+        }
+        catch (TimeoutException e) {
+            log.error("Connection timed out.");
+        }
+        catch (Exception e){
             log.error("{} ERROR {}", CrawlerConstants.UNABLE_TO_GET_RESPONSE, e.getMessage());
         }
         return null;
+    }
+
+    private Response getFutureResponse(KibanaRequest kibanaRequest) throws ExecutionException, InterruptedException, TimeoutException {
+        return CompletableFuture.supplyAsync(() -> {
+            try{
+                RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), CrawlerConstants.MAPPER.writeValueAsString(kibanaRequest));
+                Request request = new Request.Builder()
+                        .url(CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH)
+                        .post(requestBody)
+                        .headers(headers)
+                        .build();
+                return okHttpClient.newCall(request).execute();
+            } catch (Exception e){
+                log.error("Error in getFutureResponse");
+            }
+            return null;
+        }).get(TIMEOUT, TimeUnit.MINUTES);
     }
 
     @Override

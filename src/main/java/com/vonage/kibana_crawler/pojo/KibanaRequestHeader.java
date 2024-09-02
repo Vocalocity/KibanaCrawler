@@ -2,12 +2,10 @@ package com.vonage.kibana_crawler.pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Setter;
-import org.springframework.http.HttpHeaders;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
+import okhttp3.Headers;
 
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Setter
 @AllArgsConstructor
@@ -19,11 +17,11 @@ public final class KibanaRequestHeader {
 
     private String osdXsrf;
 
-    public HttpHeaders formHeaders(){
-        MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
-        map.put("osd-version", Collections.singletonList(osdVersion));
-        map.put("osd-xsrf", Collections.singletonList(osdXsrf));
-        map.put("cookie", Arrays.asList(cookie));
-        return new HttpHeaders(map);
+    public Headers formHeaders(){
+        Map<String, String> headerMap = new HashMap<>();
+        headerMap.put("osd-version", osdVersion);
+        headerMap.put("osd-xsrf", osdXsrf);
+        headerMap.put("cookie", cookie);
+        return Headers.of(headerMap);
     }
 }
