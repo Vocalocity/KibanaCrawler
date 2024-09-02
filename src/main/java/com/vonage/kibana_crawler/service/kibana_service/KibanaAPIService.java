@@ -22,7 +22,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.BlockingQueue;
+import java.util.Queue;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -80,7 +80,7 @@ public class KibanaAPIService implements IKibanaAPIService {
      */
     @Override
     @ExecutionTime
-    public void sendRequest(AppCustomizedKibanaRequest customizedKibanaRequest, BlockingQueue<KibanaResponse> container) {
+    public void sendRequest(AppCustomizedKibanaRequest customizedKibanaRequest, Queue<KibanaResponse> container) {
         if(Objects.isNull(customizedKibanaRequest)) {
             throw new IllegalArgumentException("Cannot hit servers with empty request.");
         }
