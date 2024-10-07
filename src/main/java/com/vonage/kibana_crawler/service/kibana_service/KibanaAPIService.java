@@ -70,7 +70,7 @@ public class KibanaAPIService implements IKibanaAPIService {
     private Response getFutureResponse(KibanaRequest kibanaRequest) throws ExecutionException, InterruptedException, TimeoutException {
         return CompletableFuture.supplyAsync(() -> {
             try{
-                RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), CrawlerConstants.MAPPER.writeValueAsString(kibanaRequest));
+                RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), kibanaRequest.toString());
                 Request request = new Request.Builder()
                         .url(CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH)
                         .post(requestBody)
