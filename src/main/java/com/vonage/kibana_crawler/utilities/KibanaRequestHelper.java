@@ -6,6 +6,7 @@ import com.vonage.kibana_crawler.pojo.kibana_request.KibanaRequest;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.MatchPhrase;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.MultiMatch;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.Range;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -15,44 +16,58 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class KibanaRequestHelper {
 
     public static String getQuery(KibanaRequest kibanaRequest) {
-        return kibanaRequest
-                .getParams()
-                .getBody()
-                .getQuery()
-                .getBool()
-                .getFilter().stream().filter(filter -> filter instanceof MultiMatch)
-                .map(multiMatch -> "\"" + ((MultiMatch) multiMatch).getMultiMatch().getQuery() + "\"")
-                .collect(Collectors.joining(" and ")) + " " +
-                kibanaRequest
-                .getParams()
-                .getBody()
-                .getQuery()
-                .getBool()
-                .getShould()
-                .stream()
-                .filter(should -> should instanceof MultiMatch)
-                .map(should -> "\"" + ((MultiMatch) should).getMultiMatch().getQuery() + "\"")
-                .collect(Collectors.joining(" or "));
+        String query = "";
+        try{
+            query = kibanaRequest
+                    .getParams()
+                    .getBody()
+                    .getQuery()
+                    .getBool()
+                    .getFilter().stream().filter(filter -> filter instanceof MultiMatch)
+                    .map(multiMatch -> "\"" + ((MultiMatch) multiMatch).getMultiMatch().getQuery() + "\"")
+                    .collect(Collectors.joining(" and ")) + " " +
+                    kibanaRequest
+                            .getParams()
+                            .getBody()
+                            .getQuery()
+                            .getBool()
+                            .getShould()
+                            .stream()
+                            .filter(should -> should instanceof MultiMatch)
+                            .map(should -> "\"" + ((MultiMatch) should).getMultiMatch().getQuery() + "\"")
+                            .collect(Collectors.joining(" or "));
+        }
+        catch (Exception e) {
+//            log.error("Error getting query.");
+        }
+        return query;
     }
 
     public static Pair<String, String> getRange(KibanaRequest kibanaRequest, String rangeKey) {
-        return kibanaRequest
-                .getParams()
-                .getBody()
-                .getQuery()
-                .getBool()
-                .getFilter()
-                .stream()
-                .filter(filter -> filter instanceof Range)
-                .filter(range -> ((Range) range).getRange().containsKey(rangeKey))
-                .limit(1)
-                .map(range -> ((Range) range).getRange().get(rangeKey))
-                .map(rangeParams -> new MutablePair<>(rangeParams.getGte(), rangeParams.getLte()))
-                .collect(Collectors.toList())
-                .get(0);
+        Pair<String, String> rangePair = new MutablePair<>("", "");
+        try{
+            rangePair = kibanaRequest
+                    .getParams()
+                    .getBody()
+                    .getQuery()
+                    .getBool()
+                    .getFilter()
+                    .stream()
+                    .filter(filter -> filter instanceof Range)
+                    .filter(range -> ((Range) range).getRange().containsKey(rangeKey))
+                    .limit(1)
+                    .map(range -> ((Range) range).getRange().get(rangeKey))
+                    .map(rangeParams -> new MutablePair<>(rangeParams.getGte(), rangeParams.getLte()))
+                    .collect(Collectors.toList())
+                    .get(0);
+        } catch (Exception e){
+//            log.error("Error getting range.");
+        }
+        return rangePair;
     }
 
     public static Bool getBool(KibanaRequest kibanaRequest) {

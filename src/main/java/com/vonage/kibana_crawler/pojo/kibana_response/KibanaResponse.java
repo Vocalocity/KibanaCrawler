@@ -17,10 +17,15 @@ public class KibanaResponse {
 
     public enum ResponseType {
         VALID,
-        INVALID
+        INVALID,
+        UNAUTHORIZED,
     }
 
     public static KibanaResponse invalidResponse(){
         return new KibanaResponse(ResponseType.INVALID, null);
+    }
+
+    public static KibanaResponse unauthorizedResponse(){
+        return new KibanaResponse(ResponseType.UNAUTHORIZED, null);
     }
 }

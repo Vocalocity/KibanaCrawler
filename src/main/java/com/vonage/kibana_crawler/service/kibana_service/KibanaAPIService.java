@@ -1,6 +1,5 @@
 package com.vonage.kibana_crawler.service.kibana_service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.vonage.kibana_crawler.aspects.annotation.ExecutionTime;
 import com.vonage.kibana_crawler.configs.CrawlerEnvironment;
 import com.vonage.kibana_crawler.mappers.AppCustomizedKibanaRequestToKibanaRequestMapper;
@@ -14,15 +13,8 @@ import com.vonage.kibana_crawler.utilities.constants.Symbols;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
-import okhttp3.internal.http2.Header;
 import org.springframework.context.annotation.Primary;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -49,12 +41,14 @@ public class KibanaAPIService implements IKibanaAPIService {
 
     @SneakyThrows
     @ExecutionTime
-    private KibanaResponse sendRequest(KibanaRequest request) {
+    public KibanaResponse sendRequestHelper(KibanaRequest request) {
         log.info("Searching for '{}' Duration {}...", KibanaRequestHelper.getQuery(request), KibanaRequestHelper.getRange(request, "timestamp"));
-        try{
-            Response response = getFutureResponse(request);
+        try(Response response = getFutureResponse(request)){
             if(response.isSuccessful()) {
                 return CrawlerConstants.MAPPER.readValue(response.body().string(), KibanaResponse.class);
+            }
+            else if(response.code() >= 400 && response.code() < 500) {
+                return KibanaResponse.unauthorizedResponse();
             }
             else log.error("{} Response {}", CrawlerConstants.SOMETHING_WENT_WRONG, response.body().string());
         }
@@ -62,35 +56,41 @@ public class KibanaAPIService implements IKibanaAPIService {
             log.error("Connection timed out.");
         }
         catch (Exception e){
-            log.error("{} ERROR {}", CrawlerConstants.UNABLE_TO_GET_RESPONSE, e.getMessage());
+            log.error(CrawlerConstants.UNABLE_TO_GET_RESPONSE, e);
         }
         return null;
     }
 
     private Response getFutureResponse(KibanaRequest kibanaRequest) throws ExecutionException, InterruptedException, TimeoutException {
+        RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), kibanaRequest.toString());
+        Request request = new Request.Builder()
+                .url(CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH)
+                .post(requestBody)
+                .headers(headers)
+                .build();
         return CompletableFuture.supplyAsync(() -> {
             try{
-                RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), kibanaRequest.toString());
-                Request request = new Request.Builder()
-                        .url(CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH)
-                        .post(requestBody)
-                        .headers(headers)
-                        .build();
                 return okHttpClient.newCall(request).execute();
             } catch (Exception e){
-                log.error("Error in getFutureResponse");
+                log.error("Error in getFutureResponse.", e);
             }
-            return null;
+            return new Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_2)
+                    .code(500)
+                    .body(ResponseBody.create((MediaType.get("application/json; charset=utf-8")), "{}"))
+                    .message("Error while fetching response.")
+                    .build();
+
         }).get(TIMEOUT, TimeUnit.MINUTES);
     }
 
     @Override
-    public KibanaResponse sendRequest(AppCustomizedKibanaRequest request) {
-        KibanaRequest customizedRequest = kibanaRequestMapper.toKibanaRequest(request);
+    public KibanaResponse sendRequest(KibanaRequest request) {
         KibanaResponse response = null;
         Integer retries = environment.getKibanaApiClientRetry();
         while(Objects.isNull(response) && retries > 0){
-            response = sendRequest(customizedRequest);
+            response = sendRequestHelper(request);
             retries--;
         }
         return response;
@@ -102,6 +102,7 @@ public class KibanaAPIService implements IKibanaAPIService {
     @Override
     @ExecutionTime
     public void sendRequest(AppCustomizedKibanaRequest customizedKibanaRequest, Queue<KibanaResponse> container) {
+        KibanaResponse defaultResponse = KibanaResponse.invalidResponse();
         if(Objects.isNull(customizedKibanaRequest)) {
             throw new IllegalArgumentException("Cannot hit servers with empty request.");
         }
@@ -113,7 +114,11 @@ public class KibanaAPIService implements IKibanaAPIService {
         try{
             do{
                 customizedKibanaRequest.setSearchAfter(sort);
-                KibanaResponse kibanaResponse = sendRequest(customizedKibanaRequest);
+                KibanaResponse kibanaResponse = sendRequest(this.kibanaRequestMapper.toKibanaRequest(customizedKibanaRequest));
+                if(KibanaResponse.unauthorizedResponse().equals(kibanaResponse)){
+                    defaultResponse = kibanaResponse;
+                    return;
+                }
                 log.info("Adding response to queue. Status {}", container.offer(Objects.isNull(kibanaResponse) ? KibanaResponse.invalidResponse() : kibanaResponse)
                         ? "Successful" : "Failed");
                 List<NestedHits> hits = kibanaResponse.getRawResponse().getHits().getHits();
@@ -135,7 +140,7 @@ public class KibanaAPIService implements IKibanaAPIService {
         } catch (Exception e){
             log.error(CrawlerConstants.UNABLE_TO_COMPLETE_REQUEST + " Error {}", e.getMessage());
         } finally {
-            container.offer(KibanaResponse.invalidResponse());
+            container.offer(defaultResponse);
         }
     }
 }
