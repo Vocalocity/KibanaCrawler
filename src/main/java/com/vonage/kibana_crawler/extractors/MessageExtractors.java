@@ -19,4 +19,19 @@ final public class MessageExtractors {
             throw new RuntimeException(e);
         }
     }
+
+    public static String getRequestId(String message, int bracketsToSkip){
+        int start=0;
+        while(bracketsToSkip > 0){
+            if(message.charAt(start) == '['){
+                bracketsToSkip--;
+            }
+            start++;
+        }
+        int end = start;
+        while(message.charAt(end) != ']'){
+            end++;
+        }
+        return message.substring(start, end);
+    }
 }
