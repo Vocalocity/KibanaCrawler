@@ -1,6 +1,6 @@
 package com.vonage.kibana_crawler.builder;
 
-import com.vonage.kibana_crawler.pojo.AppCustomizedKibanaRequest;
+import com.vonage.kibana_crawler.pojo.kibana_request.impl.AppCustomizedKibanaRequest;
 import com.vonage.kibana_crawler.utilities.KibanaRequestHelper;
 import org.apache.commons.lang3.tuple.Pair;
 

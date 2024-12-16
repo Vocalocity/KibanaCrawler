@@ -1,7 +1,7 @@
 package com.vonage.kibana_crawler.pojo;
 
 import com.vonage.kibana_crawler.utilities.constants.CrawlerConstants;
-import com.vonage.kibana_crawler.pojo.kibana_request.KibanaRequest;
+import com.vonage.kibana_crawler.pojo.kibana_request.impl.KibanaRequest;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
