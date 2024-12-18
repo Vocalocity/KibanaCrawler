@@ -1,11 +1,14 @@
 package com.vonage.kibana_crawler.utilities;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.vonage.kibana_crawler.pojo.kibana_request.Bool;
 import com.vonage.kibana_crawler.pojo.kibana_request.Filter;
-import com.vonage.kibana_crawler.pojo.kibana_request.KibanaRequest;
+import com.vonage.kibana_crawler.pojo.kibana_request.IKibanaRequest;
+import com.vonage.kibana_crawler.pojo.kibana_request.impl.KibanaRequest;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.MatchPhrase;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.MultiMatch;
 import com.vonage.kibana_crawler.pojo.kibana_request.filters.Range;
+import com.vonage.kibana_crawler.utilities.constants.CrawlerConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -19,10 +22,17 @@ import java.util.stream.Collectors;
 @Slf4j
 public class KibanaRequestHelper {
 
-    public static String getQuery(KibanaRequest kibanaRequest) {
+    public static String getQuery(IKibanaRequest kibanaRequest) {
+        KibanaRequest convertedRequest;
+        try {
+            convertedRequest = CrawlerConstants.MAPPER.readValue(kibanaRequest.getJSONRequest(), KibanaRequest.class);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse to 'Kibana Request'");
+            throw new RuntimeException(e);
+        }
         String query = "";
         try{
-            query = kibanaRequest
+            query = convertedRequest
                     .getParams()
                     .getBody()
                     .getQuery()
@@ -30,7 +40,7 @@ public class KibanaRequestHelper {
                     .getFilter().stream().filter(filter -> filter instanceof MultiMatch)
                     .map(multiMatch -> "\"" + ((MultiMatch) multiMatch).getMultiMatch().getQuery() + "\"")
                     .collect(Collectors.joining(" and ")) + " " +
-                    kibanaRequest
+                    convertedRequest
                             .getParams()
                             .getBody()
                             .getQuery()
@@ -42,15 +52,37 @@ public class KibanaRequestHelper {
                             .collect(Collectors.joining(" or "));
         }
         catch (Exception e) {
-//            log.error("Error getting query.");
+            log.error("Error getting query.");
         }
         return query;
     }
 
-    public static Pair<String, String> getRange(KibanaRequest kibanaRequest, String rangeKey) {
+    /**
+     * This is an expensive method as it first gets JSON request and then converts it to {@link KibanaRequest}. So refrain from using this continuously in same method as it make it slower.<br></br>
+     *
+     * <strong>Not recommended.</strong><br></br>
+     *<pre>
+     *     public void foo(){
+     *         KibanaRequestHelper.getRange.setShould(should)
+     *         KibanaRequestHelper.getRange.setFilter(filterA)
+     *         KibanaRequestHelper.getRange.setFilter(filterB)
+     *     }
+     *</pre>
+     *
+     * <strong>Recommended.</strong> <br></br>
+     * <pre>
+     *    public void foo(){
+     *         Bool bool = KibanaRequestHelper.getRange(req);
+     *         bool.setShould(should)
+     *         bool.setFilter(filterA)
+     *         bool.setFilter(filterB)
+     *      }
+     * </pre>
+     */
+    public static Pair<String, String> getRange(IKibanaRequest kibanaRequest, String rangeKey) {
         Pair<String, String> rangePair = new MutablePair<>("", "");
         try{
-            rangePair = kibanaRequest
+            rangePair = CrawlerConstants.MAPPER.readValue(kibanaRequest.getJSONRequest(), KibanaRequest.class)
                     .getParams()
                     .getBody()
                     .getQuery()
@@ -65,17 +97,44 @@ public class KibanaRequestHelper {
                     .collect(Collectors.toList())
                     .get(0);
         } catch (Exception e){
-//            log.error("Error getting range.");
+            log.error("Error getting range.");
         }
         return rangePair;
     }
 
-    public static Bool getBool(KibanaRequest kibanaRequest) {
-        return kibanaRequest
-                .getParams()
-                .getBody()
-                .getQuery()
-                .getBool();
+    /**
+     * This is an expensive method as it first gets JSON request and then converts it to {@link KibanaRequest}. So refrain from using this continuously in same method as it make it slower.<br></br>
+     *
+     * <strong>Not recommended.</strong><br></br>
+     *<pre>
+     *     public void foo(){
+     *         KibanaRequestHelper.getBool(req).setShould(should)
+     *         KibanaRequestHelper.getBool(req).setFilter(filterA)
+     *         KibanaRequestHelper.getBool(req).setFilter(filterB)
+     *     }
+     *</pre>
+     *
+     * <strong>Recommended.</strong> <br></br>
+     * <pre>
+     *    public void foo(){
+     *         Bool bool = KibanaRequestHelper.getBool(req);
+     *         bool.setShould(should)
+     *         bool.setFilter(filterA)
+     *         bool.setFilter(filterB)
+     *      }
+     * </pre>
+     */
+    public static Bool getBool(IKibanaRequest kibanaRequest) {
+        try {
+            return CrawlerConstants.MAPPER.readValue(kibanaRequest.getJSONRequest(), KibanaRequest.class)
+                    .getParams()
+                    .getBody()
+                    .getQuery()
+                    .getBool();
+        } catch (JsonProcessingException e) {
+           log.error("Unable to get boolean");
+           throw new RuntimeException(e);
+        }
     }
 
     public static MultiMatch createMultiMatch(String searchParam) {
@@ -112,7 +171,7 @@ public class KibanaRequestHelper {
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> List<T> getFilter(KibanaRequest kibanaRequest, Class<? extends Filter> filterClazz){
+    public static <T> List<T> getFilter(IKibanaRequest kibanaRequest, Class<? extends Filter> filterClazz){
         return (List<T>) getBool(kibanaRequest).getFilter()
                 .stream().filter(filter -> filter.getClass().equals(filterClazz)).collect(Collectors.toList());
     }

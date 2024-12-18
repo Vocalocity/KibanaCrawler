@@ -13,4 +13,7 @@ public class Source {
 
     @JsonProperty("timestamp")
     private String timestamp;
+
+    @JsonProperty("fqdn")
+    private String fqdn;
 }

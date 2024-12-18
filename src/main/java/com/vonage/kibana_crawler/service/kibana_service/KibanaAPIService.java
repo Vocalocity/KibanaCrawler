@@ -3,11 +3,11 @@ package com.vonage.kibana_crawler.service.kibana_service;
 import com.vonage.kibana_crawler.aspects.annotation.ExecutionTime;
 import com.vonage.kibana_crawler.configs.CrawlerEnvironment;
 import com.vonage.kibana_crawler.mappers.AppCustomizedKibanaRequestToKibanaRequestMapper;
+import com.vonage.kibana_crawler.pojo.kibana_request.IKibanaRequest;
 import com.vonage.kibana_crawler.pojo.kibana_response.NestedHits;
 import com.vonage.kibana_crawler.utilities.constants.CrawlerConstants;
 import com.vonage.kibana_crawler.utilities.KibanaRequestHelper;
-import com.vonage.kibana_crawler.pojo.AppCustomizedKibanaRequest;
-import com.vonage.kibana_crawler.pojo.kibana_request.KibanaRequest;
+import com.vonage.kibana_crawler.pojo.kibana_request.impl.KibanaRequest;
 import com.vonage.kibana_crawler.pojo.kibana_response.KibanaResponse;
 import com.vonage.kibana_crawler.utilities.constants.Symbols;
 import lombok.*;
@@ -41,9 +41,9 @@ public class KibanaAPIService implements IKibanaAPIService {
 
     @SneakyThrows
     @ExecutionTime
-    public KibanaResponse sendRequestHelper(KibanaRequest request) {
+    public KibanaResponse sendRequestHelper(IKibanaRequest request) {
         log.info("Searching for '{}' Duration {}...", KibanaRequestHelper.getQuery(request), KibanaRequestHelper.getRange(request, "timestamp"));
-        try(Response response = getFutureResponse(request)){
+        try(Response response = getFutureResponse(request.getJSONRequest())){
             if(response.isSuccessful()) {
                 return CrawlerConstants.MAPPER.readValue(response.body().string(), KibanaResponse.class);
             }
@@ -61,8 +61,8 @@ public class KibanaAPIService implements IKibanaAPIService {
         return null;
     }
 
-    private Response getFutureResponse(KibanaRequest kibanaRequest) throws ExecutionException, InterruptedException, TimeoutException {
-        RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), kibanaRequest.toString());
+    private Response getFutureResponse(String jsonRequest) throws ExecutionException, InterruptedException, TimeoutException {
+        RequestBody requestBody = RequestBody.create(MediaType.get("application/json; charset=utf-8"), jsonRequest);
         Request request = new Request.Builder()
                 .url(CrawlerConstants.KIBANA_HOST + Symbols.FORWARD_SLASH.getSymbol() + CrawlerConstants.OPEN_SEARCH)
                 .post(requestBody)
@@ -86,7 +86,7 @@ public class KibanaAPIService implements IKibanaAPIService {
     }
 
     @Override
-    public KibanaResponse sendRequest(KibanaRequest request) {
+    public KibanaResponse sendRequest(IKibanaRequest request) {
         KibanaResponse response = null;
         Integer retries = environment.getKibanaApiClientRetry();
         while(Objects.isNull(response) && retries > 0){
@@ -96,25 +96,24 @@ public class KibanaAPIService implements IKibanaAPIService {
         return response;
     }
 
-    /**
-     * @param customizedKibanaRequest throw {@link IllegalArgumentException} if this is null.
-     */
     @Override
     @ExecutionTime
-    public void sendRequest(AppCustomizedKibanaRequest customizedKibanaRequest, Queue<KibanaResponse> container) {
+    public void sendRequest(IKibanaRequest kibanaRequest, Queue<KibanaResponse> container) {
         KibanaResponse defaultResponse = KibanaResponse.invalidResponse();
-        if(Objects.isNull(customizedKibanaRequest)) {
+        if(Objects.isNull(kibanaRequest)) {
             throw new IllegalArgumentException("Cannot hit servers with empty request.");
         }
         if(Objects.isNull(container)) {
             throw new IllegalArgumentException("Cannot store response in queue.");
         }
         int totalRecords = -1, recordsFound = 0;
-        List<Object> sort = null;
+        List<Object> searchAfter = null;
         try{
             do{
-                customizedKibanaRequest.setSearchAfter(sort);
-                KibanaResponse kibanaResponse = sendRequest(this.kibanaRequestMapper.toKibanaRequest(customizedKibanaRequest));
+                if(searchAfter != null){
+                    kibanaRequest.addSearchAfter(searchAfter);
+                }
+                KibanaResponse kibanaResponse = sendRequest(kibanaRequest);
                 if(KibanaResponse.unauthorizedResponse().equals(kibanaResponse)){
                     defaultResponse = kibanaResponse;
                     return;
@@ -132,7 +131,7 @@ public class KibanaAPIService implements IKibanaAPIService {
                 recordsFound += hits.size();
                 NestedHits firstHit = hits.get(0);
                 NestedHits lastHit = hits.get(hits.size()-1);
-                sort = lastHit.getSort();
+                searchAfter = lastHit.getSort();
                 log.info(CrawlerConstants.DURATION_OF_LOGS + ": {}", Stream.of(firstHit.getSource().getTimestamp(), lastHit.getSource().getTimestamp()).sorted().collect(Collectors.joining(" - ")));
                 log.info(CrawlerConstants.LOG_IDS + "{}", firstHit.getId() + " - " + lastHit.getId());
                 log.info(CrawlerConstants.LOG_SIZE + ": {}/{}", recordsFound, totalRecords);
