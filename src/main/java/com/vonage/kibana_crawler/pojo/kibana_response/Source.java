@@ -13,4 +13,16 @@ public class Source {
 
     @JsonProperty("timestamp")
     private String timestamp;
+
+    @JsonProperty("fqdn")
+    private String fqdn;
+
+    @JsonProperty("namespace_name")
+    private String namespace;
+
+    @JsonProperty("pod_name")
+    private String podName;
+
+    @JsonProperty("pod_id")
+    private String podId;
 }
