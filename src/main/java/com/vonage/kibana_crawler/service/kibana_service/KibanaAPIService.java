@@ -42,6 +42,10 @@ public class KibanaAPIService implements IKibanaAPIService {
     @SneakyThrows
     @ExecutionTime
     public KibanaResponse sendRequestHelper(KibanaRequest request) {
+        if(headers == null) {
+            log.error("Unable to move call Kibana as headers are null.");
+            return KibanaResponse.unauthorizedResponse();
+        }
         log.info("Searching for '{}' Duration {}...", KibanaRequestHelper.getQuery(request), KibanaRequestHelper.getRange(request, "timestamp"));
         try(Response response = getFutureResponse(request)){
             if(response.isSuccessful()) {
