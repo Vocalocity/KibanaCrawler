@@ -16,6 +16,7 @@ import okhttp3.*;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -39,6 +40,13 @@ public class KibanaAPIService implements IKibanaAPIService {
     @Getter
     private Headers headers;
 
+    /**
+     * Sends request to Kibana servers and gets response. If the response is successful, map the response to {@link KibanaResponse}
+     * and returns the same. If the response status is in between 400 and 499 returns {@link KibanaResponse#unauthorizedResponse()}.
+     * If the response status is greater than 499 then returns {@link KibanaResponse#invalidResponse()}
+     * @param request simple kibana request
+     * @return {@link KibanaResponse}, {@link KibanaResponse#unauthorizedResponse()}, {@link KibanaResponse#invalidResponse()}
+     */
     @SneakyThrows
     @ExecutionTime
     public KibanaResponse sendRequestHelper(KibanaRequest request) {
@@ -48,21 +56,27 @@ public class KibanaAPIService implements IKibanaAPIService {
         }
         log.info("Searching for '{}' Duration {}...", KibanaRequestHelper.getQuery(request), KibanaRequestHelper.getRange(request, "timestamp"));
         try(Response response = getFutureResponse(request)){
-            if(response.isSuccessful()) {
-                return CrawlerConstants.MAPPER.readValue(response.body().string(), KibanaResponse.class);
-            }
-            else if(response.code() >= 400 && response.code() < 500) {
-                return KibanaResponse.unauthorizedResponse();
-            }
-            else log.error("{} Response {}", CrawlerConstants.SOMETHING_WENT_WRONG, response.body().string());
+            return getResponseByStatus(response);
         }
         catch (TimeoutException e) {
             log.error("Connection timed out.");
         }
         catch (Exception e){
-            log.error(CrawlerConstants.UNABLE_TO_GET_RESPONSE, e);
+            log.error("Exception occurred while sending request.");
         }
-        return null;
+        return KibanaResponse.invalidResponse();
+    }
+
+    private KibanaResponse getResponseByStatus(Response response) throws IOException {
+        if(response.isSuccessful()) {
+            return CrawlerConstants.MAPPER.readValue(response.body().string(), KibanaResponse.class);
+        }
+        else if(response.code() >= 400 && response.code() < 500) {
+            return KibanaResponse.unauthorizedResponse();
+        }
+        else{
+            return KibanaResponse.invalidResponse();
+        }
     }
 
     private Response getFutureResponse(KibanaRequest kibanaRequest) throws ExecutionException, InterruptedException, TimeoutException {
@@ -82,18 +96,21 @@ public class KibanaAPIService implements IKibanaAPIService {
                     .request(request)
                     .protocol(Protocol.HTTP_2)
                     .code(500)
-                    .body(ResponseBody.create((MediaType.get("application/json; charset=utf-8")), "{}"))
-                    .message("Error while fetching response.")
+                    .body(ResponseBody.create((MediaType.get("application/json; charset=utf-8")), "Error while fetching response."))
                     .build();
 
         }).get(TIMEOUT, TimeUnit.MINUTES);
     }
 
+    /**
+     * Sends request to helper method. Retries if the response is invalid.
+     * @return {@link KibanaResponse}
+     */
     @Override
     public KibanaResponse sendRequest(KibanaRequest request) {
-        KibanaResponse response = null;
+        KibanaResponse response = KibanaResponse.invalidResponse();
         Integer retries = environment.getKibanaApiClientRetry();
-        while(Objects.isNull(response) && retries > 0){
+        while(KibanaResponse.invalidResponse().equals(response) && retries > 0){
             response = sendRequestHelper(request);
             retries--;
         }
